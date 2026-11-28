@@ -156,16 +156,16 @@ export async function verify(pdf,cert,trust,progress,histories=[]) {
   markers(p,seen);
   check(seen.size || p.team,"The certificate has no time allocation.");
   check(!histories.length || p.camera_audit,"No primary camera history to compare.");
-  const counts = {activity:0,engagement:0};
+  const counts = {activity:0,engagement:0,camera:0};
   if (p.camera_audit !== undefined) {
     const {verifyCamera} = await import("./camera.js");
     const known = new Map();
     counts.cameraPolicy = p.camera_audit.policy;
-    counts.camera = await verifyCamera(p.camera_audit,p.work_id,trust.public_key,signature,known);
+    counts.camera = await verifyCamera(p.camera_audit,p.work_id,trust.public_key,signature,known,p.credited_seconds);
     for (const other of histories) {
       check(other?.payload?.registry_id === trust.registry_id,"Camera comparison uses a different registry.");
       await signature(trust.public_key,other.signature,other.payload);
-      await verifyCamera(other.payload.camera_audit,other.payload.work_id,trust.public_key,signature,known);
+      await verifyCamera(other.payload.camera_audit,other.payload.work_id,trust.public_key,signature,known,other.payload.credited_seconds);
     }
   }
   async function submit(kind,proof,expected) {
@@ -200,5 +200,8 @@ export async function verify(pdf,cert,trust,progress,histories=[]) {
     }
     check(same(t.totals,{recorded_seconds:seen.size,modeled_seconds:modeled,estimated_active_ms:active,contributor_devices:devices}),"Team totals disagree with the signed contributions.");
   }
-  return {edition,recorded:seen.size,modeled,active,devices,counts,hash:p.pdf_sha256,registry:p.registry_id,team:Boolean(p.team)};
+  // Only the issuing registry has a camera report in the current certificate format.
+  const auditedDevices = Number(p.credited_seconds > 0 && counts.camera > 0);
+  const cameraRequirementMet = auditedDevices > 0 && auditedDevices === devices;
+  return {edition,recorded:seen.size,modeled,active,devices,auditedDevices,cameraRequirementMet,counts,hash:p.pdf_sha256,registry:p.registry_id,team:Boolean(p.team)};
 }

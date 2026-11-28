@@ -11,7 +11,7 @@ const sha = async b => hex(await crypto.subtle.digest("SHA-256",b));
 const hash = obj => sha(text.encode(canonical(obj)));
 const hashPattern = /^[0-9a-f]{64}$/;
 
-export async function verifyCamera(report,work,credential,signature,known = new Map()) {
+export async function verifyCamera(report,work,credential,signature,known,creditedSeconds) {
   const fail = () => { throw Error("Invalid or incomplete timestamped camera sequence."); };
   if (report?.scope !== "disclosed-history-only" || ![policy,mapPolicy].includes(report.policy) ||
       !Array.isArray(report.runs) || !Array.isArray(report.slots) || !report.slots.length ||
@@ -19,12 +19,13 @@ export async function verifyCamera(report,work,credential,signature,known = new 
   const {cameraTimestamp,cameraProof} = await import("./engine.bundle.js");
   const seed = await sha(raw(credential));
   const key = await crypto.subtle.importKey("raw",raw(seed),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
-  let previous = "00".repeat(32), index = 0, priorEnd = 0;
+  let previous = "00".repeat(32), index = 0, priorEnd = 0, availableSeconds = 0;
   for (const pair of report.runs) {
     if (!Array.isArray(pair) || pair.length !== 2) fail();
     const [start,end] = pair;
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < priorEnd || start > end) fail();
     priorEnd = end;
+    availableSeconds += Math.max(0,Math.floor(end/1000)-Math.ceil(start/1000));
     for (let minute=Math.ceil(start/60000); minute<Math.floor(end/60000); minute++) {
       const item = report.slots[index++];
       if (!item || minute > 100000000) fail();
@@ -60,5 +61,7 @@ export async function verifyCamera(report,work,credential,signature,known = new 
     }
   }
   if (index!==report.slots.length) fail();
+  if (!Number.isSafeInteger(creditedSeconds) || creditedSeconds < 0 || creditedSeconds > availableSeconds)
+    throw Error("The registry's credited duration is inconsistent with its disclosed camera recording intervals.");
   return index;
 }

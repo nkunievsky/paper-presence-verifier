@@ -6,6 +6,8 @@ Choose the paper PDF and its Paper Presence certificate independently. Each inpu
 
 ## What the result covers
 
+The public form requires a verified timestamped camera sample from every device claiming time by default. The result shows the registry-attested duration, verified window count, and number of contributing devices with verified samples. The current team format carries only the issuing device’s camera report. To inspect older receipts or a team allocation with unsampled contributors, clear the requirement. All attached proofs still undergo verification in either mode. Windows describe the disclosed recording runs. The certificate does not link individual credited seconds to those windows.
+
 - The verifier checks the Ed25519 allocation signature against the pinned public registry key. Other issuers require a key obtained independently, selected under **Registry key**. An author-supplied key authenticates a signature only to the extent the reader trusts that key.
 - The PDF’s SHA-256 must match the signed allocation. For an extension-generated publication copy, the verifier additionally checks its signed trailer, the original bytes, the annotated body, and the digest of the accompanying certificate. Reprinting or rebuilding a PDF can change its bytes.
 - Recorded time is checked against unique allocated seconds within the certificate. Team receipts also require the signed paper manifest, independently signed contributions scoped to that manifest, unique device keys and credits, and exact aggregate totals. The device count does not identify distinct people. The verifier has no global database of other certificates.

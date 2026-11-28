@@ -95,18 +95,27 @@ function duration(ms) {
   const s = ms/1000, h = Math.floor(s/3600), m = Math.floor(s%3600/60);
   return [h ? h+" h" : "",m ? m+" min" : "",(s%60 || !h && !m) ? Number((s%60).toFixed(3))+" s" : ""].filter(Boolean).join(" ");
 }
-function show(r,custom,trust) {
-  status("PDF and certificate verified");
+function show(r,custom,trust,requireCamera) {
+  if (requireCamera && !r.cameraRequirementMet) {
+    status("Camera audit requirement unmet",true);
+  } else {
+    status(r.cameraRequirementMet ? "PDF, certificate and sampled camera audit verified" : "PDF and registry signature verified");
+  }
   explain(r.edition+" matched. The allocation signature is valid under "+(custom ? "the registry key you supplied." : "the verifier’s published registry key."));
+  if (requireCamera && !r.cameraRequirementMet) {
+    explain(r.team ? "Each device contributing time needs its own verified camera sample. This certificate format supports camera samples from the issuing device only." :
+      "This certificate contains no verified timestamped camera windows. For a new edition, enable Paper Presence: Timestamp Camera Audit in VS Code before starting the recording.");
+  }
   const dl = document.createElement("dl");
   function row(label,value,mono=false) {
     const dt=document.createElement("dt"),dd=document.createElement("dd");
     dt.textContent=label; dd.textContent=value; if (mono) dd.className="digest"; dl.append(dt,dd);
   }
-  row("Recorded presence",duration(r.recorded*1000)+(r.team ? " of combined person-time" : ""));
+  row("Registry-attested presence",duration(r.recorded*1000)+(r.team ? " across contributing devices" : ""));
+  row("Timestamped camera windows verified",String(r.counts.camera));
+  row("Contributing devices with verified samples",r.auditedDevices+" of "+r.devices);
   row("Estimated engagement",r.active === null ? "No modeled time in this certificate" : duration(r.active)+" across "+duration(r.modeled*1000)+" of modeled presence");
-  if (r.team) row("Contributing devices",r.devices);
-  if (r.counts.camera) row("Timestamped camera audit",r.counts.camera+" three-frame window(s) verified. "+(r.counts.cameraPolicy==="camera-minute-3-yunet-output-maps-v1" ? "At least one qualifying face in each committed YuNet output map. The recorder supplies the image-to-map inference and liveness check." : "The private-pixel classifier ran on the disclosed windows."));
+  if (r.counts.camera) row("What the sample proves",r.counts.cameraPolicy==="camera-minute-3-yunet-output-maps-v1" ? "At least one qualifying face in each of three committed YuNet output maps per window. Image-to-map inference and liveness rely on the recorder." : "The private-pixel classifier ran on the three frames in each disclosed window.");
   row("Zero-knowledge proofs",r.counts.activity+r.counts.engagement || r.counts.camera ? r.counts.activity+" activity and "+r.counts.engagement+" engagement proofs verified"+(r.counts.camera ? ", "+r.counts.camera+" camera proofs verified" : "") : "No embedded proofs in this allocation");
   row("Certified PDF SHA-256",r.hash,true);
   row("Registry ID",r.registry,true);
@@ -116,6 +125,7 @@ function show(r,custom,trust) {
 form.addEventListener("submit",async event => {
   event.preventDefault(); clear();
   const current = generation;
+  const requireCamera = document.querySelector("#require-camera").checked;
   controller = new AbortController();
   status("Reading files…");
   function fail(message) {
@@ -142,7 +152,7 @@ form.addEventListener("submit",async event => {
       if (current !== generation) return;
       if (data.progress) status(data.progress);
       else if (data.error) fail(data.error);
-      else {worker.terminate(); worker=null; show(data.result,custom,trust);}
+      else {worker.terminate(); worker=null; show(data.result,custom,trust,requireCamera);}
     };
     worker.onerror = () => fail("The verification engine could not run in this browser. Reload the page or try a current browser.");
     const files = [...document.querySelector("#camera-history").files];
