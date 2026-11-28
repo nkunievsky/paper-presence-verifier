@@ -35,3 +35,28 @@ export async function checkProof(circuit, proof, expected) {
     throw Error("An embedded zero-knowledge proof failed cryptographic verification.");
   }
 }
+
+export {cameraTimestamp} from "./camera.js";
+
+export async function cameraProof(encoded, fields) {
+  const raw = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+  if (raw.length !== 10304 || fields.length !== 64) throw Error("Invalid camera proof dimensions.");
+  if (!programs.has("camera")) {
+    const r = await fetch(new URL("./circuits/camera.bin",import.meta.url));
+    if (!r.ok) throw Error("Unable to load camera verifier.");
+    programs.set("camera",new Uint8Array(await r.arrayBuffer()));
+  }
+  const data = new Uint8Array(132 + raw.length + 32*fields.length);
+  // verify(bytes,bytes32[])
+  data.set([0xea,0x50,0xd0,0xe4]);
+  putWord(data,4,64);
+  putWord(data,36,96 + raw.length);
+  putWord(data,68,raw.length);
+  data.set(raw,100);
+  putWord(data,100 + raw.length,fields.length);
+  fields.forEach((v,i) => putWord(data,132 + raw.length + 32*i,v));
+  machine ??= await createEVM();
+  const r = await machine.runCode({code:programs.get("camera"),data,gasLimit:60000000n});
+  if (r.exceptionError || r.returnValue.length !== 32 || r.returnValue[31] !== 1 ||
+      r.returnValue.subarray(0,31).some(x => x !== 0)) throw Error("Camera window proof did not verify.");
+}

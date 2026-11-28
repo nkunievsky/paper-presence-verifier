@@ -1,4 +1,4 @@
-import { padPolicy, policy, model } from "./policies.js";
+import { singleFacePad, padPolicy, policy, model } from "./policies.js";
 
 export const defaultTrust = {
   registry_id: "94293088-5a7f-436b-8644-b5bf61d0bf8f",
@@ -65,12 +65,16 @@ function markers(body,seen) {
 function liveness(body,isOwner) {
   const r = body.passive_liveness;
   if (!r && isOwner) return;
-  check(r && r.policy_id === padPolicy.id && r.attestation === "registry-signed" && integer(r.screened_seconds) &&
+  const reported = [padPolicy,singleFacePad].find(p => p.id === r?.policy_id);
+  const mixed = r?.policy_id === "face-pad-mn3-window-v1-and-v2";
+  check(r && (reported || mixed) && r.attestation === "registry-signed" && integer(r.screened_seconds) &&
     r.screened_seconds <= body.credited_seconds && same(Object.keys(r.windows).sort(),["inconclusive","passed","rejected"]) &&
     Object.values(r.windows).every(integer) && (!r.screened_seconds || r.windows.passed > 0),"Invalid registry-signed liveness coverage.");
   if (isOwner) {
     const parts = body.validator_policy.policies ?? [{policy:body.validator_policy,credited_seconds:body.credited_seconds}];
-    check(parts.filter(x=>same(x.policy,padPolicy)).reduce((n,x)=>n+x.credited_seconds,0) === r.screened_seconds,"Liveness time differs from the signed policy allocation.");
+    const covered = mixed ? [singleFacePad,padPolicy] : [reported];
+    if (mixed) check(covered.every(p=>parts.some(x=>same(x.policy,p)&&x.credited_seconds>0)),"Invalid mixed camera policy");
+    check(parts.filter(x=>covered.some(p=>same(x.policy,p))).reduce((n,x)=>n+x.credited_seconds,0) === r.screened_seconds,"Liveness time differs from the signed policy allocation.");
   }
 }
 function field(value) { return value.toString(16).padStart(2,"0").padEnd(64,"0"); }
@@ -140,7 +144,7 @@ async function evidence(body, submit) {
   }
   return {modeled:covered,active};
 }
-export async function verify(pdf,cert,trust,progress) {
+export async function verify(pdf,cert,trust,progress,histories=[]) {
   const p = cert?.payload;
   check(p?.kind === "attendance-allocation-v1" && p.proof_type === "ed25519-registry-receipt" && p.zero_knowledge === false,"Unsupported certificate format. Choose a Paper Presence allocation certificate.");
   check(typeof trust?.registry_id === "string" && trust.registry_id === p.registry_id,"The certificate names a different registry. Supply an independently trusted key for its issuer under Registry key.");
@@ -151,7 +155,19 @@ export async function verify(pdf,cert,trust,progress) {
   const seen = new Set();
   markers(p,seen);
   check(seen.size || p.team,"The certificate has no time allocation.");
+  check(!histories.length || p.camera_audit,"No primary camera history to compare.");
   const counts = {activity:0,engagement:0};
+  if (p.camera_audit !== undefined) {
+    const {verifyCamera} = await import("./camera.js");
+    const known = new Map();
+    counts.cameraPolicy = p.camera_audit.policy;
+    counts.camera = await verifyCamera(p.camera_audit,p.work_id,trust.public_key,signature,known);
+    for (const other of histories) {
+      check(other?.payload?.registry_id === trust.registry_id,"Camera comparison uses a different registry.");
+      await signature(trust.public_key,other.signature,other.payload);
+      await verifyCamera(other.payload.camera_audit,other.payload.work_id,trust.public_key,signature,known);
+    }
+  }
   async function submit(kind,proof,expected) {
     progress("Checking "+kind+" proof "+(counts[kind]+1)+"…");
     const {checkProof} = await import("./engine.bundle.js");

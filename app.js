@@ -106,7 +106,8 @@ function show(r,custom,trust) {
   row("Recorded presence",duration(r.recorded*1000)+(r.team ? " of combined person-time" : ""));
   row("Estimated engagement",r.active === null ? "No modeled time in this certificate" : duration(r.active)+" across "+duration(r.modeled*1000)+" of modeled presence");
   if (r.team) row("Contributing devices",r.devices);
-  row("Zero-knowledge proofs",r.counts.activity+r.counts.engagement ? r.counts.activity+" activity and "+r.counts.engagement+" engagement proofs verified" : "No embedded proofs in this allocation");
+  if (r.counts.camera) row("Timestamped camera audit",r.counts.camera+" three-frame window(s) verified. "+(r.counts.cameraPolicy==="camera-minute-3-yunet-output-maps-v1" ? "At least one qualifying face in each committed YuNet output map. The recorder supplies the image-to-map inference and liveness check." : "The private-pixel classifier ran on the disclosed windows."));
+  row("Zero-knowledge proofs",r.counts.activity+r.counts.engagement || r.counts.camera ? r.counts.activity+" activity and "+r.counts.engagement+" engagement proofs verified"+(r.counts.camera ? ", "+r.counts.camera+" camera proofs verified" : "") : "No embedded proofs in this allocation");
   row("Certified PDF SHA-256",r.hash,true);
   row("Registry ID",r.registry,true);
   row("Registry public key",trust.public_key,true);
@@ -144,6 +145,10 @@ form.addEventListener("submit",async event => {
       else {worker.terminate(); worker=null; show(data.result,custom,trust);}
     };
     worker.onerror = () => fail("The verification engine could not run in this browser. Reload the page or try a current browser.");
-    worker.postMessage({pdf,certificate,trust},[pdf,certificate]);
+    const files = [...document.querySelector("#camera-history").files];
+    if (files.reduce((n,f)=>n+f.size,0)>64*1024*1024) throw Error("Additional certificates exceed 64 MiB.");
+    const histories = await Promise.all(files.map(f=>f.arrayBuffer()));
+    if (current !== generation) return;
+    worker.postMessage({pdf,certificate,trust,histories},[pdf,certificate,...histories]);
   } catch (err) {fail(err.message);}
 });

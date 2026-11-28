@@ -31,3 +31,16 @@ npm run bundle
 ```
 
 The engine uses EthereumJS and its dependencies. The lockfile records the exact upstream sources and package integrity hashes. Distribution notices are in [Third-party notices](THIRD_PARTY.md).
+
+## Experimental timestamped camera audit
+
+For 0.7.9 first-edition certificates, the worker also checks the exact RFC 3161 request imprint, nonce, accepted policy, signed time, timestamp-signing EKU and signature chain to the FreeTSA root bundled in this verifier. It verifies each three-frame UltraHonk proof using a fixed verifier compiled by Barretenberg 6.0.0. Additional signed certificates selected under **Compare camera histories** share a credential-and-minute index during verification. There is no external lookup for omitted records. Verification uses the shipped static assets and opens no timestamp-service connection.
+
+Reproduce the camera verifier from the repository root with the project's Barretenberg binary, then solc 0.8.27. Convert the hexadecimal runtime in `HonkVerifier.bin-runtime` into raw bytes for `circuits/camera.bin`. The browser PKI bundle incorporates the project's pinned FreeTSA root from `prototype/timestamp_trust`.
+
+```sh
+bb write_solidity_verifier -k presence-0.7/experiments/presence_proof/window_key.key -o /tmp/camera.sol -t evm --optimized
+solc --optimize --bin-runtime /tmp/camera.sol -o /tmp/camera-runtime
+```
+
+New 0.7.10 camera windows use an embedded RISC Zero composite receipt. The worker verifies it with the shipped WebAssembly module and fixed guest image ID, and compares its 32-byte journal with the timed, signed window commitment. A positive proof covers the YuNet detection rule on each of three private output maps. Image-to-map inference, camera origin and liveness rely on the recording installation.

@@ -1,4 +1,4 @@
-export const padPolicy = {
+export const singleFacePad = {
   "id": "face-pad-mn3-window-v1",
   "detector": "OpenCV YuNet 2023mar",
   "opencv": "4.11.0",
@@ -22,6 +22,9 @@ export const padPolicy = {
   "capture_attested": false,
   "pad_inference_zk": false
 };
+export const padPolicy = {...singleFacePad, id:"face-pad-mn3-window-v2",
+  requires:"at least one detected face with width and height at least 64 source pixels",
+  window_rule:"highest valid real score among qualifying crops, first in detector order on ties; same threshold and repeat check on the selected crop"};
 export const model = "ee7dcff20d96a6693f064f0627dcd2e3ff97f879b774db3f9abdb597b3fe109a";
 export const policy = {
   "alpha": 0.995,
